@@ -1,0 +1,18 @@
+#!/bin/bash
+
+BUCKET="hilton-data-utility-onq-folders-backup"
+
+aws s3api list-objects --bucket "$BUCKET" --query 'Contents[].[Key, LastModified]' --output text | \
+awk '{
+    split($1, pathParts, "/");
+    prefix = pathParts[1];  # top-level folder
+    date = substr($2, 1, 10);
+    count[prefix,date]++;
+}
+END {
+    printf "%-25s %-12s %s\n", "FOLDER", "DATE", "COUNT"
+    for (entry in count) {
+        split(entry, parts, SUBSEP);
+        printf "%-25s %-12s %d\n", parts[1], parts[2], count[entry];
+    }
+}' | sort
