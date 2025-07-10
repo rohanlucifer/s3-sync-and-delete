@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# Script: s3-sync-local-delete.sh
+# Description: Sync → Local Delete Only if Both S3 Syncs Succeed
+
+# Configuration
+LOGFILE="/var/log/s3-sync-local-delete.log"
+SOURCE_DIR1="/efs/pulse-home-3/hilton-ftp"
+S3_TARGET1="s3://hilton-data-utility-onq-folders-backup/hilton-ftp/"
+SOURCE_DIR2="/efs/pulse-home-3/processed-files"
+S3_TARGET2="s3://hilton-data-utility-onq-folders-backup/processed-files/"
+DELETE_DAYS=90
+AWS_REGION="us-east-1"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOGFILE"
+}
+
+log "=== Starting S3 Sync and Conditional Local Cleanup ==="
+
+# --------------------------
+# Phase 1: Sync to S3
+# --------------------------
+
+log "Syncing $SOURCE_DIR1 to S3..."
+if aws s3 sync "$SOURCE_DIR1" "$S3_TARGET1" --region "$AWS_REGION" >> "$LOGFILE" 2>&1; then
+    log "Sync for $SOURCE_DIR1 succeeded."
+    SYNC1_SUCCESS=true
+else
+    log "Sync for $SOURCE_DIR1 failed. Aborting deletion."
+    SYNC1_SUCCESS=false
+fi
+
+log "Syncing $SOURCE_DIR2 to S3..."
+if aws s3 sync "$SOURCE_DIR2" "$S3_TARGET2" --region "$AWS_REGION" >> "$LOGFILE" 2>&1; then
+    log "Sync for $SOURCE_DIR2 succeeded."
+    SYNC2_SUCCESS=true
+else
+    log "Sync for $SOURCE_DIR2 failed. Aborting deletion."
+    SYNC2_SUCCESS=false
+fi
+
+# --------------------------
+# Abort if any sync failed
+# --------------------------
+
+if [ "$SYNC1_SUCCESS" = false ] || [ "$SYNC2_SUCCESS" = false ]; then
+    log "Aborting deletion due to sync failure."
+    exit 1
+fi
+
+# --------------------------
+# Phase 2: Local Cleanup
+# --------------------------
+
+log "Both S3 syncs succeeded. Proceeding with local file deletion."
+log "=== Conditional Local File Cleanup Report ==="
+
+process_directory() {
+    local dir=$1
+    local count=$(find "$dir" -type f -mtime +$DELETE_DAYS -printf '.' | wc -c)
+    log "Files older than $DELETE_DAYS days in $dir: $count"
+
+    if [ $count -gt 0 ]; then
+        log "Deleting $count files from $dir"
+        find "$dir" -type f -mtime +$DELETE_DAYS -delete >> "$LOGFILE" 2>&1
+        local remaining=$(find "$dir" -type f -mtime +$DELETE_DAYS -printf '.' | wc -c)
+        log "Remaining old files in $dir: $remaining"
+    else
+        log "No files to delete in $dir"
+    fi
+}
+
+process_directory "$SOURCE_DIR1"
+process_directory "$SOURCE_DIR2"
+
+log "=== Script Completed ==="
