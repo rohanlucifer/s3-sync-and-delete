@@ -1,0 +1,45 @@
+### current files which are older than 90 days 2025-05-01  ######################
+ubuntu@ip-172-31-1-30:~/script-s3-sync$ find /efs/pulse-home-3/hilton-ftp /efs/pulse-home-3/hilton-ftp/ -type f -mtime +90 | wc -l
+31990
+ubuntu@ip-172-31-1-30:~/script-s3-sync$ find /efs/pulse-home-3/hilton-ftp /efs/pulse-home-3/hilton-ftp/ -type f -mtime +90 | wc -l
+31990
+
+
+### current files count 2025-05-01 ########################################################
+
+ubuntu@ip-172-31-1-30:~/script-s3-sync$ echo "hilton-ftp: $(find /efs/pulse-home-3/hilton-ftp/ -type f | wc -l)"
+hilton-ftp: 66960
+ubuntu@ip-172-31-1-30:~/script-s3-sync$ echo "processed-files: $(find /efs/pulse-home-3/processed-files/ -type f | wc -l)"
+processed-files: 185010
+
+### count total number of files in those folders ###########################################
+find /efs/pulse-home-3/processed-files -type f | wc -l
+find /efs/pulse-home-3/hilton-ftp -type f | wc -l
+
+
+
+##### find files which are older than 90 days ############################################
+
+find /efs/pulse-home-3/hilton-ftp /efs/pulse-home-3/hilton-ftp/ -type f -mtime +90 | wc -l
+
+find /efs/pulse-home-3/hilton-ftp /efs/pulse-home-3/hilton-ftp/ -type f -mtime +90 | wc -l
+
+
+####check files upload dates in s3 #########################################################
+BUCKET="hilton-data-utility-onq-folders-backup"
+
+# List all objects and extract folder (prefix) and date
+aws s3api list-objects-v2 --bucket "$BUCKET" --query 'Contents[].[Key, LastModified]' --output text | \
+awk '{
+    split($1, pathParts, "/");
+    prefix = pathParts[1];  # top-level folder
+    date = substr($2, 1, 10);
+    count[prefix,date]++;
+}
+END {
+    printf "%-25s %-12s %s\n", "FOLDER", "DATE", "COUNT"
+    for (entry in count) {
+        split(entry, parts, SUBSEP);
+        printf "%-25s %-12s %d\n", parts[1], parts[2], count[entry];
+    }
+}' | sort
